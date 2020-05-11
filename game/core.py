@@ -8,6 +8,7 @@ from twisted.web import http, server, xmlrpc
 from datetime import datetime
 import matplotlib.pyplot as plt
 import random
+import copy
 import string
 import pickle
 
@@ -379,7 +380,7 @@ class TestMaster(NetworkGame):
 
         for player in self.players:
             if player.isQbot:
-                arr = player.Q_HASH_TABLE
+                arr = player.Deep_Copy()
                 pickle.dump(arr, open("sample.pkl", "ab"))
 
         plt.plot(self.x1, self.y1, label = "Rewards")
