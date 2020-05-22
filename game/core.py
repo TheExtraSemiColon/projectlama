@@ -95,7 +95,7 @@ class NetworkGame(Game):
         else:
             return {"error": "Game is full"}
 
-    def add_bot(self, Q = False):
+    def add_bot(self, Q=False, play=False):
         if len(self.players) < 6:
             if not Q:
                 alias = "Bot" + str(self.num_bots()+1)
@@ -108,6 +108,8 @@ class NetworkGame(Game):
                     k=5))
             new = NetworkPlayer(alias, player_token, Q)
             new.bot(Q)
+            if play:
+                new.Play_Init()
             self.players.append(new)
             return {"token": player_token}
         else:
@@ -478,7 +480,7 @@ class GameMaster(xmlrpc.XMLRPC):
         GameMaster.__apply_CORS_headers(request)
         try:
             _ = pickle.load(open("sample.pkl", "rb"))
-            return self.games[game_id].add_bot(True)
+            return self.games[game_id].add_bot(True, True)
         except (OSError, IOError) as e:
             return self.games[game_id].add_bot()
 
