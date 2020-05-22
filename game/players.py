@@ -1,5 +1,7 @@
 from .utils import plus_one
 from collections import defaultdict
+import pickle
+import math
 import copy
 import random
 
@@ -15,10 +17,15 @@ class Player:
             #New parameters added from here
             self.GAME_REW = 0
             self.GAME_PEN = 0
+            self.Train = True
 
-            self.Q_TABLE = defaultdict(int)
-            self.ALPHA = 0.2
-            self.DISCOUNT_FACTOR = 0.8
+            try:
+                self.Q_TABLE = pickle.load(open("sample.pkl", "rb"))
+            except (OSError, IOError) as e:
+                self.Q_TABLE = defaultdict(int)
+
+            self.ALPHA = 0.4
+            self.DISCOUNT_FACTOR = 0.9
             self.EPSILON = 0.5
             #The state can never be 0, so it's okay to initialise as such
             self.PREV_STATE = 0
@@ -71,9 +78,8 @@ class Player:
 
     ####### All Changes start from here #########
 
-    def Deep_Copy(self):
-        arr = copy.deepcopy(self.Q_TABLE)
-        return arr
+    def Play_Init(self):
+        self.Train = False
 
     def G_Rew(self):
         return self.GAME_REW
@@ -81,9 +87,16 @@ class Player:
     def G_Pen(self):
         return self.GAME_PEN
 
-    def encode(self, deck):
+    def Decay_EPSILON(self, game_num, tot_games):
+        try: self.c
+        except AttributeError: self.c = math.log(50)/float(tot_games)
+
+        self.EPSILON = (0.5) * math.exp(-1 * self.c * float(game_num))
+
+    def encode(self, deck, num_players):
         #Encodes the hand of the player
         #Units is tc; the rest are number of cards for 1,2,..
+        #The First Digit from the left shows the number of active players
         index = 0
         tc = deck.discard_pile[-1]
         index = index + tc
@@ -95,6 +108,7 @@ class Player:
             if x == plus_one(tc):
                 temp2 = True
             index = index + int(pow(10, x))
+        index = index + num_players*int(pow(10, 8))
         if temp1 and temp2:
             num_actions = 3
         return (index, num_actions)
@@ -148,23 +162,23 @@ class Player:
         return True
 
 
-    def Q_Bot_AI(self, deck):
+    def Q_Bot_Logic(self, deck, num_players):
         if self.active == False:
             return None
         else:
-            index, num_actions = self.encode(deck)
+            index, num_actions = self.encode(deck, num_players)
             _ = self.Q_Search(index, num_actions)
 
             if self.PREV_STATE == 0:
                 self.PREV_STATE = index
-            self.CURR_STATE = index          
+            self.CURR_STATE = index     
 
             exp = random.random()
             temp = []
             for i in range(num_actions):
                 temp.append(self.Q_TABLE[index, i])
             MAX_Q_VALUE = max(temp)
-            if exp < self.EPSILON:
+            if exp < self.EPSILON and self.Train:
                 move = random.randint(0, num_actions-1)
             else:
                 move = temp.index(max(temp))
@@ -201,15 +215,16 @@ class Player:
                     Penalty = self.Fold_Penalty()
 
             #Update the Previous State using the MAX_Q_VALUE with the Discount Factor Formula
-            if self.PREV_STATE != self.CURR_STATE:
+            if self.PREV_STATE != self.CURR_STATE and self.Train:
                 self.Q_TABLE[self.PREV_STATE, self.PREV_ACT] = (1-self.ALPHA)*(self.Q_TABLE[self.PREV_STATE, self.PREV_ACT]) + (self.ALPHA)*((self.PREV_REWARD) + self.DISCOUNT_FACTOR*(MAX_Q_VALUE))
             
             #Finishing Hand and Folding render the AI inactive, so we update the current Q_VALUE with Discount Factor as 0
             if type(result) is int and len(self.hand)==1:
                 Reward+=self.COMPL_REWARD
-                self.Q_TABLE[self.CURR_STATE, move] = (1-self.ALPHA)*(self.Q_TABLE[self.CURR_STATE, move]) + (self.ALPHA)*(Reward)
+                if self.Train:
+                    self.Q_TABLE[self.CURR_STATE, move] = (1-self.ALPHA)*(self.Q_TABLE[self.CURR_STATE, move]) + (self.ALPHA)*(Reward)
 
-            if result == "Fold":
+            if result == "Fold" and self.Train:
                 self.Q_TABLE[self.CURR_STATE, move] = (1-self.ALPHA)*(self.Q_TABLE[self.CURR_STATE, move]) + (self.ALPHA)*(Penalty)
 
             self.PREV_STATE = self.CURR_STATE
