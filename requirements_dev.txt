@@ -1,1 +1,2 @@
 Twisted==19.10.0
+matplotlib==3.2.1
