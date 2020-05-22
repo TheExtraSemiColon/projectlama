@@ -8,7 +8,6 @@ from twisted.web import http, server, xmlrpc
 from datetime import datetime
 import matplotlib.pyplot as plt
 import random
-import copy
 import string
 import pickle
 
@@ -18,7 +17,6 @@ class Game:
         self.history = []
         self.state = None
         self.test = False
-        self.ROUND_NO = 0
         self.num_games = 0
         self.tot_games = 0
         self.bot_no = 0
@@ -46,11 +44,6 @@ class Game:
 class NetworkGame(Game):
     def __init__(self, game_id):
         self.game_id = game_id
-        self.CUM_REW = 0
-        self.CUM_PEN = 0
-        self.x1 = []
-        self.y1 = []
-        self.y2 = []
         self.players = []
         self.error_queue = deque()
         self.input_wait_queue = deque()
@@ -60,10 +53,25 @@ class NetworkGame(Game):
 
     def init(self):
         super().init()
-        if self.test:    
+        if self.test:
+            resp = prompter(f"Add a Q-Agent for Training or Testing?(Y/N)", [])
+            if resp == "y" or resp == "Y":
+                self.add_bot(True)
+                resp = prompter(f"Enter 1 to Train AI, and 2 to Test already trained AI", [])
+                if resp == "1":
+                    self.CUM_REW = 0
+                    self.CUM_PEN = 0
+                    self.x1 = []
+                    self.y1 = []
+                    self.y2 = []
+                elif resp == "2":
+                    self.Won_Games = 0.0
+                    for player in self.players:
+                        if player.isQbot:
+                            player.Play_Init()
+                            
             self.tot_games = prompter(f"How many Games?", [])
             self.bot_no = int(prompter(f"How many bots?", []))
-            self.add_bot(True)
             for i in range(self.bot_no):
                 self.add_bot()
 
@@ -95,7 +103,6 @@ class NetworkGame(Game):
                 alias = "Q-Agent"
             player_token = ''.join(
                 random.choices(
-                    #Might help to distinguish between players and bots
                     string.ascii_lowercase +
                     string.digits,
                     k=5))
@@ -113,7 +120,7 @@ class NetworkGame(Game):
         score = score + increment
         return score
 
-    def logic_bot(self, player, discard_pile):
+    def naive_bot(self, player, discard_pile):
         if player.active == False:
             return None
         for card in player.hand:
@@ -145,30 +152,38 @@ class NetworkGame(Game):
 
     def evaluate(self, state, info):
         log_info = open("logs.txt", "a")
+
+        Store = True
+
+        for player in self.players:
+            if player.isQbot and player.Train:
+                Store = False
         
         if state is State.TEST_BEGIN:
-
-            log_info.write(f"nT\n{str(datetime.now())}\n\n")
+            if Store:
+                log_info.write(f"nT\n{str(datetime.now())}\n\n")
             return None, State.GAME_BEGIN
 
         if state is State.GAME_BEGIN:
             if self.test:
                 self.num_games+=1
-                log_info.write(f"nG {str(self.num_games)}\n\n")
+                if Store:
+                    log_info.write(f"nG {str(self.num_games)}\n\n")
             else:
-                log_info.write(f"nG {str(datetime.now())}\n\n")
+                if Store:
+                    log_info.write(f"nG {str(datetime.now())}\n\n")
 
             return None, State.ROUND_BEGIN
 
         elif state is State.ROUND_BEGIN:
-            self.ROUND_NO+=1
             # deck
             self.deck = Deck()
             self.deck.start()
 
             #Logging the top card when the round starts
-            log_info.write(f"nR\n\n")
-            log_info.write(f"tC\n{str(self.deck.discard_pile[-1])}\n\n") 
+            if Store:    
+                log_info.write(f"nR\n\n")
+                log_info.write(f"tC\n{str(self.deck.discard_pile[-1])}\n\n") 
             self.package_send2 = {}
             
             # first draw
@@ -203,21 +218,24 @@ class NetworkGame(Game):
                         if info == "Fold":
                             player.deactivate()
                             self._broadcast_message(f"<span class='l-player-name'>{player.alias}</span> has folded")
-                            log_info.write(f"pT\n{player.alias}\n")
-                            for x in player.hand:
-                                log_info.write(f"{str(x)} ")
-                            log_info.write(f"\nf\n \n")
-                            log_info.write(f"tC\n{str(self.deck.discard_pile[-1])}\n\n")
+                            if Store:
+                                log_info.write(f"pT\n{player.alias}\n")
+                                for x in player.hand:
+                                    log_info.write(f"{str(x)} ")
+                                log_info.write(f"\nf\n \n")
+                                log_info.write(f"tC\n{str(self.deck.discard_pile[-1])}\n\n")
                             log_info.close()
                             
                         elif info == "Draw":
-                            log_info.write(f"pT\n{player.alias}\n")
-                            for x in player.hand:
-                                log_info.write(f"{str(x)} ")
+                            if Store:
+                                log_info.write(f"pT\n{player.alias}\n")
+                                for x in player.hand:
+                                    log_info.write(f"{str(x)} ")
                             player.draw(self.deck)
                             self._broadcast_message(f"<span class='l-player-name'>{player.alias}</span> has drawn")
-                            log_info.write(f"\nd\n\n")
-                            log_info.write(f"tC\n{str(self.deck.discard_pile[-1])}\n\n")                           
+                            if Store:
+                                log_info.write(f"\nd\n\n")
+                                log_info.write(f"tC\n{str(self.deck.discard_pile[-1])}\n\n")                           
                             log_info.close()                        
                         else:
                             return Prompt.FD, State.ROUND_CONT
@@ -228,26 +246,31 @@ class NetworkGame(Game):
                         if info == "Fold":
                             player.deactivate()
                             self._broadcast_message(f"<span class='l-player-name'>{player.alias}</span> has folded")
-                            log_info.write(f"pT\n{player.alias}\n")
-                            for x in player.hand:
-                                log_info.write(f"{str(x)} ")
-                            log_info.write(f"\nf")
-                            log_info.write(f"tC\n{str(self.deck.discard_pile[-1])}\n\n")
+                            if Store:
+                                log_info.write(f"pT\n{player.alias}\n")
+                                for x in player.hand:
+                                    log_info.write(f"{str(x)} ")
+                                log_info.write(f"\nf")
+                                log_info.write(f"tC\n{str(self.deck.discard_pile[-1])}\n\n")
                             log_info.close()
                         elif deck.playable(info) and info in player.hand:
-                            log_info.write(f"pT\n{player.alias}\n")                            
-                            for x in player.hand:
-                                log_info.write(f"{str(x)} ")
+                            if Store:
+                                log_info.write(f"pT\n{player.alias}\n")                            
+                                for x in player.hand:
+                                    log_info.write(f"{str(x)} ")
                             tbd = player.delete(info)
                             deck.discard(tbd)
                             self._broadcast_message(f"<span class='l-player-name'>{player.alias}</span> has played {tbd}")
-                            log_info.write(f"\np{tbd}\n")
+                            if Store:
+                                log_info.write(f"\np{tbd}\n")
                             # round ender if finishes hand
                             if not len(player.hand):
-                                log_info.write(f"\nhF\n\n")
+                                if Store:
+                                    log_info.write(f"\nhF\n\n")
                                 return None, State.ROUND_END
                             else:
-                                log_info.write(f"\ntC\n{str(self.deck.discard_pile[-1])}\n\n")
+                                if Store:
+                                    log_info.write(f"\ntC\n{str(self.deck.discard_pile[-1])}\n\n")
                             log_info.close()
                         else:
                             return Prompt.PF, State.ROUND_CONT
@@ -257,20 +280,24 @@ class NetworkGame(Game):
             return None, State.ROUND_CONT
 
         elif state is State.ROUND_END:
-            log_info.write(f"rE\n")
             over = self.calc_score()
             scores = [(player.alias, player.score) for player in self.players]
-            for player in self.players:
-                log_info.write(f"{player.alias},{player.score}\n")
-            log_info.write('\n')
+            if Store:
+                log_info.write(f"rE\n")
+                for player in self.players:
+                    log_info.write(f"{player.alias},{player.score}\n")
+                log_info.write('\n')
             self._broadcast_message(scores, typ='SPECIAL')
             if over:
                 winner = sorted(self.players,
                                 key=lambda x: x.score)[0]
+                if winner.isQbot and not winner.Train:
+                    self.Won_Games+=1
                 self._broadcast_message({'winner': winner.alias}, typ='SPECIAL')
-                log_info.write(f"gE\n")
-                log_info.write(f"{winner.alias}\n\n")
-                log_info.close()
+                if Store:
+                    log_info.write(f"gE\n")
+                    log_info.write(f"{winner.alias}\n\n")
+                    log_info.close()
                 return None, State.GAME_END
             else:
                 log_info.close()
@@ -281,7 +308,12 @@ class NetworkGame(Game):
                 print(f"GN {self.num_games}")
                 return None, State.GAME_BEGIN
             else:
-                log_info.write(f"tE\n")
+                for player in self.players:
+                    if player.isQbot and not player.Train:
+                        Win_Perc = float(self.Won_Games/self.num_games) * 100
+                        print(f"Win Percentage of the Q-Agent: {Win_Perc}")
+                if Store:
+                    log_info.write(f"tE\n")
                 log_info.close()
                 return None, State.TEST_END
 
@@ -323,7 +355,6 @@ class TestMaster(NetworkGame):
         super().init()
         #State moves from TEST_BEGIN to GAME_BEGIN
         self.step(None)
-        
 
     def run(self):
         while self.state is not State.TEST_END:
@@ -333,18 +364,18 @@ class TestMaster(NetworkGame):
 
             if self.state is State.ROUND_CONT:
 
-                n = 0
+                num_players = 0
                 for temp in self.players:
                     if temp.active:
-                        n+=1
-                if n==0:
+                        num_players+=1
+                if num_players==0:
                     self.state = State.ROUND_END
 
                 
                 if not self.turn.isQbot:
-                    move = self.logic_bot(self.turn, self.deck.discard_pile)
+                    move = self.naive_bot(self.turn, self.deck.discard_pile)
                 else:
-                    move = self.turn.Q_Bot_AI(self.deck)
+                    move = self.turn.Q_Bot_Logic(self.deck, num_players)
 
                 if move is not None:
                     self.step(move)
@@ -360,15 +391,15 @@ class TestMaster(NetworkGame):
 
             if self.state is State.GAME_END:
                 for player in self.players:
-                    if player.isQbot:
+                    if player.isQbot and player.Train:
                         self.CUM_REW+=player.G_Rew()
                         self.CUM_PEN+=player.G_Pen()
-                        if (self.num_games%10000) == 0 and player.EPSILON > 0:
-                            player.EPSILON = player.EPSILON - 0.1
-                        if (self.num_games%100) == 0:
+                        if (self.num_games%200) == 0:
+                            player.Decay_EPSILON(self.num_games, self.tot_games)
+                        if (self.num_games%200) == 0:
                             self.x1.append(self.num_games)
-                            self.y1.append((self.CUM_REW)/100)
-                            self.y2.append((self.CUM_PEN)/100)
+                            self.y1.append((self.CUM_REW)/200)
+                            self.y2.append((self.CUM_PEN)/200)
                             self.CUM_REW = 0
                             self.CUM_PEN = 0
                         player.GAME_REW = 0
@@ -380,20 +411,19 @@ class TestMaster(NetworkGame):
 
         for player in self.players:
             if player.isQbot:
-                arr = player.Deep_Copy()
-                pickle.dump(arr, open("sample.pkl", "ab"))
-
-        plt.plot(self.x1, self.y1, label = "Rewards")
-        plt.plot(self.x1, self.y2, label = "Penalties")
-        plt.xlabel('Game num')
-        plt.ylabel('Penalties/Rewards')
-        plt.title('Graph')
-        plt.legend()
-        plt.show()
-        
-
-
-
+                player.EPSILON = 0.5
+                Train = player.Train
+                if player.Train:
+                    arr = player.Q_TABLE
+                    pickle.dump(arr, open("sample.pkl", "ab"))
+                    plt.plot(self.x1, self.y1, label = "Rewards")
+                    plt.plot(self.x1, self.y2, label = "Penalties")
+                    plt.xlabel('Game num')
+                    plt.ylabel('Penalties/Rewards')
+                    plt.title('Graph')
+                    plt.legend()
+                    plt.show()
+                break
 
 
 class GameMaster(xmlrpc.XMLRPC):
@@ -446,7 +476,11 @@ class GameMaster(xmlrpc.XMLRPC):
     @xmlrpc.withRequest
     def xmlrpc_add(self, request, game_id):
         GameMaster.__apply_CORS_headers(request)
-        return self.games[game_id].add_bot()
+        try:
+            _ = pickle.load(open("sample.pkl", "rb"))
+            return self.games[game_id].add_bot(True)
+        except (OSError, IOError) as e:
+            return self.games[game_id].add_bot()
 
     @xmlrpc.withRequest
     def xmlrpc_query_state(self, request, game_id, player_token):
@@ -501,7 +535,7 @@ class GameMaster(xmlrpc.XMLRPC):
 
         if game.turn is not None:
             if game.turn.isbot:
-                    _ = game.step(game.logic_bot(game.turn, game.deck.discard_pile))
+                    _ = game.step(game.naive_bot(game.turn, game.deck.discard_pile))
         
         return result
 
