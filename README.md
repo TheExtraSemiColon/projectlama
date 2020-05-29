@@ -5,9 +5,11 @@ Leg Alle Minpunten Af
 
 ```python
 pip install -r requirements_dev.txt
-# For testing of bots
+# For Testing and Training of bots
 python test-arena.py
-# For future
+# For scannning the Q-Table
+python scan.py 
+# For Playing the game
 python lama-server.py # in one terminal
 python lama-client.py # in another and more
 ```
@@ -22,4 +24,3 @@ Keyword- Meaning, Stored data
 5) rE - round End, scores of all the players
 6) gE - game End, winner
 7) tE - End of Testing
-
