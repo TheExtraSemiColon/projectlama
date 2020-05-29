@@ -57,19 +57,22 @@ class NetworkGame(Game):
             resp = prompter(f"Add a Q-Agent for Training or Testing?(Y/N)", [])
             if resp == "y" or resp == "Y":
                 self.add_bot(True)
-                resp = prompter(f"Enter 1 to Train AI, and 2 to Test already trained AI", [])
-                if resp == "1":
-                    self.CUM_REW = 0
-                    self.CUM_PEN = 0
-                    self.x1 = []
-                    self.y1 = []
-                    self.y2 = []
-                elif resp == "2":
-                    self.Won_Games = 0.0
-                    for player in self.players:
-                        if player.isQbot:
-                            player.Play_Init()
-                            
+                while True:
+                    resp = prompter(f"Enter 1 to Train AI, and 2 to Test already trained AI", [])
+                    if resp == "1":
+                        self.CUM_REW = 0
+                        self.CUM_PEN = 0
+                        self.x1 = []
+                        self.y1 = []
+                        self.y2 = []
+                        break
+                    elif resp == "2":
+                        self.Won_Games = 0.0
+                        for player in self.players:
+                            if player.isQbot:
+                                player.Play_Init()
+                        break
+
             self.tot_games = prompter(f"How many Games?", [])
             self.bot_no = int(prompter(f"How many bots?", []))
             for i in range(self.bot_no):
@@ -475,6 +478,7 @@ class GameMaster(xmlrpc.XMLRPC):
         GameMaster.__apply_CORS_headers(request)
         return self.games[game_id].add_player(alias)
 
+    #Adds a Q-Agent if the Pickle file is present, adds a Naive AI otherwise
     @xmlrpc.withRequest
     def xmlrpc_add(self, request, game_id):
         GameMaster.__apply_CORS_headers(request)
