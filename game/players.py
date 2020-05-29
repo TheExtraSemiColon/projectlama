@@ -19,6 +19,7 @@ class Player:
             self.GAME_PEN = 0
             self.Train = True
 
+            #Q_Table is loaded in or created accordingly
             try:
                 self.Q_TABLE = pickle.load(open("sample.pkl", "rb"))
             except (OSError, IOError) as e:
@@ -76,8 +77,6 @@ class Player:
                 return self.hand.pop(i)
             i = i + 1
 
-    ####### All Changes start from here #########
-
     def Play_Init(self):
         self.Train = False
 
@@ -87,6 +86,8 @@ class Player:
     def G_Pen(self):
         return self.GAME_PEN
 
+    #This function decays the value of Epsilon exponentially
+    #The value of Epsilon is reset in core.py after testing is done
     def Decay_EPSILON(self, game_num, tot_games):
         try: self.c
         except AttributeError: self.c = math.log(50)/float(tot_games)
@@ -114,7 +115,7 @@ class Player:
         return (index, num_actions)
 
     def decode(self, index):
-        #Returns a list with first elemeent as tc and the rest as the player's hand
+        #Returns a list with first element as tc and the rest as the player's hand
         result = []
         result.append(index%10)
         index = int(index/10)
@@ -161,7 +162,7 @@ class Player:
                 self.Q_TABLE[index, i] = random.random()
         return True
 
-
+    #Decision making and updating the Q-Table happends here
     def Q_Bot_Logic(self, deck, num_players):
         if self.active == False:
             return None
@@ -186,6 +187,7 @@ class Player:
             Reward = 0
             Penalty = 0
 
+            #Deciding on what action to take
             if not self.playable(deck):
                 if move == 0:
                     result = "Draw"
@@ -213,6 +215,8 @@ class Player:
                 else:
                     result = "Fold"
                     Penalty = self.Fold_Penalty()
+
+            #Update the Q-Table if the bot is being trained
 
             #Update the Previous State using the MAX_Q_VALUE with the Discount Factor Formula
             if self.PREV_STATE != self.CURR_STATE and self.Train:
