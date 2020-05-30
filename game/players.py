@@ -5,14 +5,19 @@ import math
 import copy
 import random
 
+
+
+
+
+
 class Player:
     def __init__(self, Q = False, auto=False):
-        self.auto = auto
-        self.hand = []
-        self.active = True
-        self.isbot = False
-        self.isQbot = Q
-        self.score = 0
+        self.auto = auto   #what is auto?
+        self.hand = []     #cards avaible in hands of player
+        self.active = True #False if player folded; true otherwise
+        self.isbot = False #True for bots
+        self.isQbot = Q    #True for the Q-learning bot
+        self.score = 0     #score of cards in hand
         if self.isQbot:
             #New parameters added from here
             self.GAME_REW = 0
@@ -23,8 +28,10 @@ class Player:
             try:
                 self.Q_TABLE = pickle.load(open("sample.pkl", "rb"))
             except (OSError, IOError) as e:
-                self.Q_TABLE = defaultdict(int)
+                self.Q_TABLE = defaultdict(int)  #if pickle file not avialable, it ccreates an empty table
 
+
+            #parameters of Q-table values updation
             self.ALPHA = 0.4
             self.DISCOUNT_FACTOR = 0.9
             self.EPSILON = 0.5
@@ -33,66 +40,73 @@ class Player:
             self.CURR_STATE = 0
 
             self.PREV_REWARD = 0
+
+            #constant reqards given to the agent after completion/fold
             self.COMPL_REWARD = 10.0
             #self.PLAY_REWARD defined later
             self.DRAW_PENALTY = (-0.5)
             #self.FOLD_PENALTY defined later
 
     def init(self):
-        self.hand = []
-        self.activate()
+        self.hand = [] #This is for emptying everything?
+        self.activate() #what is tis for?
 
+
+    #called when player folds
     def deactivate(self):
         self.active = False
 
+    #is this called anywhere?
     def activate(self):
         self.active = True
 
+    #where is this function called?
     def bot(self, Q):
         self.isbot = True
-        self.isQbot = Q
+        self.isQbot = Q 
 
+    #drawing a card from the shuffled main deck pile
     def draw(self, deck):
         self.hand.append(deck.main_pile.pop())
 
+    #calculate the score of the cards in hand
     def calc_score(self):
+
         if not len(self.hand):
             if not self.score:
                 self.score = 0
             # TODO: Ideally the following should be a choice
             elif self.score < 10:
-                self.score = self.score - 1
+                self.score = self.score - 1 #is this correct?
             else:
                 self.score = self.score - 10
+        
         else:
-            uniq_hand = list(set(self.hand))
-            increment = sum(map(lambda x: x if x < 7 else 10, uniq_hand))
+            uniq_hand = list(set(self.hand)) #arrange the cards in alphabetical order and removes multiple cards for a number
+            increment = sum(map(lambda x: x if x < 7 else 10, uniq_hand)) # value same as card except for x=7 i.e. lama card
             self.score = self.score + increment
         return self.score
 
     def delete(self, n):
-        i = 0
-        while i < len(self.hand):
-            if self.hand[i] == n:
-                return self.hand.pop(i)
-            i = i + 1
+        if n in self.hand:
+            return self.hand.pop(self.hand.index(n))
+        else:
+            print("card not in hand")
 
+    #where is this called??
     def Play_Init(self):
         self.Train = False
-
+    #wreturns the rewards accumulated 
     def G_Rew(self):
         return self.GAME_REW
-
+    #returns the penalty accumulated
     def G_Pen(self):
         return self.GAME_PEN
 
     #This function decays the value of Epsilon exponentially
     #The value of Epsilon is reset in core.py after testing is done
     def Decay_EPSILON(self, game_num, tot_games):
-        try: self.c
-        except AttributeError: self.c = math.log(50)/float(tot_games)
-
-        self.EPSILON = (0.5) * math.exp(-1 * self.c * float(game_num))
+        self.EPSILON = (0.5) * math.exp(-1 * (math.log(50)/float(tot_games)) * float(game_num))
 
     def encode(self, deck, num_players):
         #Encodes the hand of the player
@@ -104,22 +118,19 @@ class Player:
         (temp1, temp2) = (False, False)
         num_actions = 2
         for x in self.hand:
-            if x == tc:
-                temp1 = True
-            if x == plus_one(tc):
-                temp2 = True
             index = index + int(pow(10, x))
         index = index + num_players*int(pow(10, 8))
-        if temp1 and temp2:
-            num_actions = 3
+        
+        if tc in self.hand and plus_one(tc) in self.hand:
+            num_actions=3
         return (index, num_actions)
-
+    #shouldn't this return no. of players and top card of discard pile
     def decode(self, index):
         #Returns a list with first element as tc and the rest as the player's hand
         result = []
         result.append(index%10)
         index = int(index/10)
-        for i in range(1, 8, 1):
+        for i in range(1, 8):
             while index%10 != 0:
                 result.append(i)
                 index = index - 1
@@ -131,9 +142,10 @@ class Player:
         for temp in self.hand:
             if temp == card:
                 rep+=1
-        PLAY_REWARD = (card - (rep/2)) * (0.1)
+        PLAY_REWARD = (card - (rep/2)) * (0.1) #logic can be improved
         return PLAY_REWARD
 
+    # parameter can be played with
     def Fold_Penalty(self):
         temp_score = self.bot_score(self.hand)
         if temp_score > 13:
@@ -143,9 +155,8 @@ class Player:
         return FOLD_PENALTY
 
     def playable(self, deck):
-        for card in self.hand:
-            if card ==  deck.discard_pile[-1] or card == plus_one(deck.discard_pile[-1]):
-                return True
+        if deck.discard_pile[-1] in self.hand or plus_one(deck.discard_pile[-1]) in self.hand:
+            return True
 
         return False
 
@@ -155,32 +166,39 @@ class Player:
         increment = sum(map(lambda x: x if x < 7 else 10, uniq_hand))
         score = score + increment
         return score
-
+    
+    #change the name
     def Q_Search(self, index, num_actions):
-        if self.Q_TABLE[index, 0] == 0:
+        if self.Q_TABLE[index, 0] == 0:     #shouldn't this be null instead of 0?
             for i in range(num_actions):
                 self.Q_TABLE[index, i] = random.random()
         return True
 
-    #Decision making and updating the Q-Table happends here
+    #Decision making and updating the Q-Table happens here
     def Q_Bot_Logic(self, deck, num_players):
+        #if player has folded already
         if self.active == False:
             return None
+        #if player if active
         else:
             index, num_actions = self.encode(deck, num_players)
             _ = self.Q_Search(index, num_actions)
 
+            #only for the first turn
             if self.PREV_STATE == 0:
                 self.PREV_STATE = index
+            
             self.CURR_STATE = index     
 
-            exp = random.random()
+            exp = random.random() #shouldn't this be within a range? considering max value of epsilon
             temp = []
             for i in range(num_actions):
                 temp.append(self.Q_TABLE[index, i])
             MAX_Q_VALUE = max(temp)
+            #exploitation
             if exp < self.EPSILON and self.Train:
                 move = random.randint(0, num_actions-1)
+            #exploration
             else:
                 move = temp.index(max(temp))
 
@@ -197,15 +215,19 @@ class Player:
                     Penalty = self.Fold_Penalty()
             elif num_actions == 2:
                 if move == 0:
-                    for card in self.hand:
-                        if card == deck.discard_pile[-1] or card == plus_one(deck.discard_pile[-1]):
-                            result = card
-                            Reward = self.Play_Reward(card)
-                            break
+                    if deck.discard_pile[-1] in self.hand:
+                        card= deck.discard_pile[-1]
+                    elif plus_one(deck.discard_pile[-1]) in self.hand:
+                        card=plus_one(deck.discard_pile[-1])
+
+
+                    result = self.hand.index(card)
+                    Reward = self.Play_Reward(card)
+                        
                 else:
                     result = "Fold"
                     Penalty = self.Fold_Penalty()
-            else:
+            else:    #num_actions=3
                 if move == 0:
                     result = deck.discard_pile[-1]
                     Reward = self.Play_Reward(result)
@@ -234,10 +256,12 @@ class Player:
             self.PREV_STATE = self.CURR_STATE
             self.PREV_ACT = move
             self.PREV_REWARD = (Reward + Penalty)
+            #for plotting the rewards and penalties over the graph 
             self.GAME_PEN+=Penalty
             self.GAME_REW+=Reward
 
             return result
+
 
 class NetworkPlayer(Player):
     def __init__(self, alias, token, Q = False):
